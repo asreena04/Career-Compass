@@ -1285,3 +1285,5 @@ app.post("/api/generate-cv", async (req, res) => {
 
 const port = process.env.PORT || 3001;
 app.listen(port, () => console.log(`API running on http://localhost:${port}`));
+
+export default app;

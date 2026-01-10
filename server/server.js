@@ -7,7 +7,15 @@ import PDFDocument from 'pdfkit';
 dotenv.config();
 
 const app = express();
-app.use(cors({ origin: true }));
+// -- Deployment
+app.use(cors({ 
+  origin: [
+    'http://localhost:5173',  // local dev
+    'https://career-compass-client.vercel.app/', // vercel domain
+    /\.vercel\.app$/  // all vercel preview deployments
+  ],
+  credentials: true 
+}));
 app.use(express.json());
 
 const admin = createClient(

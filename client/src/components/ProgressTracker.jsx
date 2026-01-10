@@ -2,7 +2,7 @@ import React, { useEffect, useState } from "react";
 import { supabase } from "../../supabaseClient";
 import Header from "../../components/Header.jsx";
 
-const API_BASE = "http://localhost:3001";
+const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:3001";
 
 const BUCKET = "skill-proofs";
 

@@ -1,19 +1,8 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { supabase } from "../../supabaseClient";
-import Header from "../../components/Header.jsx";
-import {
-  FiChevronDown,
-  FiLock,
-  FiTarget,
-  FiUploadCloud,
-  FiAlertCircle,
-  FiCheckCircle,
-  FiClock,
-  FiXCircle,
-  FiX,
-} from "react-icons/fi";
+import {FiChevronDown,FiLock,FiTarget,FiUploadCloud,FiAlertCircle,FiCheckCircle,FiClock,FiXCircle,FiX} from "react-icons/fi";
 
-const API_BASE = "http://localhost:3001";
+const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:3001";
 
 function Badge({ kind, locked }) {
   // kind: "past" | "current" | "locked" | "year"

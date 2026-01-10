@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { supabase } from "../supabaseClient";
 
-const API_BASE = "http://localhost:3001";
+const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:3001";
 const OTHER_OPTION_VALUE = "OTHER_CUSTOM_SKILL";
 
 // Must match your DB normalize_skill logic (client-side only for duplicate prevention in UI)

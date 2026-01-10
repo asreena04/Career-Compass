@@ -2,7 +2,7 @@ import React, { useEffect, useState } from "react";
 import { supabase } from "../../supabaseClient";
 import { FiFileText, FiUploadCloud,FiX,FiAlertCircle,FiCheckCircle,FiClock,FiXCircle,FiExternalLink } from "react-icons/fi";
 
-const API_BASE = "http://localhost:3001";
+const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:3001";
 const BUCKET = "skill-proofs";
 
 async function openProofFile(pathOrUrl) {

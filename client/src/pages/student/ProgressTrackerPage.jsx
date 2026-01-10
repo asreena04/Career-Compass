@@ -4,7 +4,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { FiUsers, FiTrendingUp, FiAward, FiTarget, FiCheckCircle, FiClock, FiXCircle, FiAlertCircle, FiFileText, FiChevronDown, FiChevronUp } from 'react-icons/fi';
 import AdvisorMenuBar from '../components/AdvisorMenuBar';
 
-const API_BASE = "http://localhost:3001";
+const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:3001";
 
 export default function StudentProgressTracker() {
   const navigate = useNavigate();

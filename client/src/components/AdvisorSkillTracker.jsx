@@ -4,7 +4,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { FiCheckCircle, FiAward, FiCalendar, FiArrowLeft, FiSearch, FiTrendingUp, FiTarget, FiBarChart2, FiAlertCircle } from 'react-icons/fi';
 import AdvisorMenuBar from '../components/AdvisorMenuBar';
 
-const API_BASE = "http://localhost:3001";
+const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:3001";
 
 export default function StudentApprovedSkills() {
   const location = useLocation();

@@ -1223,48 +1223,175 @@ app.get("/advisor/student/:studentId/completed-skills", async (req, res) => {
 });
 
 // ==================== Admin ================================
-// -------- View all user from profiles table
-app.get("/admin/users", async (req, res) => {
-  const { user, error } = await requireAdmin(req);
-  if (!user) return res.status(401).json({ error });
-
-  const { data, error: qErr } = await admin
-    .from("profiles")
-    .select("id, email, role, username, avatar_url")
-    .order("email", { ascending: true });
-
-  if (qErr) return res.status(400).json({ error: qErr.message });
-  res.json(data);
-});
-
-// ------------- modify user (role, username, avatar_url)
-app.patch("/admin/users/:id", async (req, res) => {
+// -------- View all user from profiles table (profile + role profile)
+app.get("/admin/users/:id/details", async (req, res) => {
   const { user, error } = await requireAdmin(req);
   if (!user) return res.status(401).json({ error });
 
   const targetId = req.params.id;
-  const { role, username, avatar_url } = req.body;
 
-  // prevent changing yourself out of admin by accident (optional)
-  if (targetId === user.id && role && role !== "Admin") {
-    return res.status(400).json({ error: "You cannot remove your own Admin role." });
+  // 1) Base profile
+  const { data: profile, error: pErr } = await admin
+    .from("profiles")
+    .select("id, email, role, username, avatar_url")
+    .eq("id", targetId)
+    .single();
+
+  if (pErr) return res.status(400).json({ error: pErr.message });
+
+  // 2) Role-specific
+  let roleProfile = null;
+
+  if (profile.role === "Student") {
+    const { data, error: sErr } = await admin
+      .from("student_profiles")
+      .select("id, full_name, matric_number, programme, school, year_of_study, advisor_id")
+      .eq("id", targetId)
+      .maybeSingle();
+
+    if (sErr) return res.status(400).json({ error: sErr.message });
+    roleProfile = data;
   }
 
+  if (profile.role === "Academic Advisor") {
+    const { data, error: aErr } = await admin
+      .from("academic_advisor_profiles")
+      .select("id, full_name, room_number, position, department")
+      .eq("id", targetId)
+      .maybeSingle();
+
+    if (aErr) return res.status(400).json({ error: aErr.message });
+    roleProfile = data;
+  }
+
+  if (profile.role === "Company") {
+    const { data, error: cErr } = await admin
+      .from("company_profiles")
+      .select("id, company_name, website, company_category, contact_link, hr_contact_name")
+      .eq("id", targetId)
+      .maybeSingle();
+
+    if (cErr) return res.status(400).json({ error: cErr.message });
+    roleProfile = data;
+  }
+
+  return res.json({ profile, roleProfile });
+});
+
+// ------------ update student profile ---------------
+app.patch("/admin/students/:id", async (req, res) => {
+  const { user, error } = await requireAdmin(req);
+  if (!user) return res.status(401).json({ error });
+
+  const id = req.params.id;
+
+  // Ensure target is a Student
+  const { data: p, error: pErr } = await admin
+    .from("profiles")
+    .select("id, role")
+    .eq("id", id)
+    .single();
+
+  if (pErr) return res.status(400).json({ error: pErr.message });
+  if (p.role !== "Student") return res.status(400).json({ error: "Target user is not a Student" });
+
+  const allowed = ["full_name", "matric_number", "programme", "school", "year_of_study", "advisor_id"];
   const payload = {};
-  if (role) payload.role = role; // must be one of the enum values
-  if (username !== undefined) payload.username = username;
-  if (avatar_url !== undefined) payload.avatar_url = avatar_url;
+  for (const k of allowed) {
+    if (req.body[k] !== undefined) payload[k] = req.body[k];
+  }
+
+  // Optional: normalize numeric year
+  if (payload.year_of_study !== undefined && payload.year_of_study !== null) {
+    payload.year_of_study = Number(payload.year_of_study);
+    if (Number.isNaN(payload.year_of_study)) {
+      return res.status(400).json({ error: "year_of_study must be a number" });
+    }
+  }
 
   const { data, error: updErr } = await admin
-    .from("profiles")
+    .from("student_profiles")
     .update(payload)
-    .eq("id", targetId)
-    .select("id, email, role, username, avatar_url")
+    .eq("id", id)
+    .select("id, full_name, matric_number, programme, school, year_of_study, advisor_id")
     .single();
 
   if (updErr) return res.status(400).json({ error: updErr.message });
-  res.json({ ok: true, user: data });
+  return res.json({ ok: true, student_profile: data });
 });
+
+// ----------admin: update advisor profile---------------
+
+app.patch("/admin/advisors/:id", async (req, res) => {
+  const { user, error } = await requireAdmin(req);
+  if (!user) return res.status(401).json({ error });
+
+  const id = req.params.id;
+
+  // Ensure target is an Academic Advisor
+  const { data: p, error: pErr } = await admin
+    .from("profiles")
+    .select("id, role")
+    .eq("id", id)
+    .single();
+
+  if (pErr) return res.status(400).json({ error: pErr.message });
+  if (p.role !== "Academic Advisor") {
+    return res.status(400).json({ error: "Target user is not an Academic Advisor" });
+  }
+
+  const allowed = ["full_name", "room_number", "position", "department"];
+  const payload = {};
+  for (const k of allowed) {
+    if (req.body[k] !== undefined) payload[k] = req.body[k];
+  }
+
+  const { data, error: updErr } = await admin
+    .from("academic_advisor_profiles")
+    .update(payload)
+    .eq("id", id)
+    .select("id, full_name, room_number, position, department")
+    .single();
+
+  if (updErr) return res.status(400).json({ error: updErr.message });
+  return res.json({ ok: true, advisor_profile: data });
+});
+
+// ---------------admin: update company profile-------------
+
+app.patch("/admin/companies/:id", async (req, res) => {
+  const { user, error } = await requireAdmin(req);
+  if (!user) return res.status(401).json({ error });
+
+  const id = req.params.id;
+
+  // Ensure target is a Company
+  const { data: p, error: pErr } = await admin
+    .from("profiles")
+    .select("id, role")
+    .eq("id", id)
+    .single();
+
+  if (pErr) return res.status(400).json({ error: pErr.message });
+  if (p.role !== "Company") return res.status(400).json({ error: "Target user is not a Company" });
+
+  const allowed = ["company_name", "website", "company_category", "contact_link", "hr_contact_name"];
+  const payload = {};
+  for (const k of allowed) {
+    if (req.body[k] !== undefined) payload[k] = req.body[k];
+  }
+
+  const { data, error: updErr } = await admin
+    .from("company_profiles")
+    .update(payload)
+    .eq("id", id)
+    .select("id, company_name, website, company_category, contact_link, hr_contact_name")
+    .single();
+
+  if (updErr) return res.status(400).json({ error: updErr.message });
+  return res.json({ ok: true, company_profile: data });
+});
+
 
 // --- Add New Competition (in competition_posts table in supabase)
 app.post("/admin/competitions", async (req, res) => {
@@ -1322,14 +1449,31 @@ app.get("/admin/competitions", async (req, res) => {
   res.json(data);
 });
 
-// ---- admin: delete/update competition
+// ---- admin: update competition
 app.patch("/admin/competitions/:id", async (req, res) => {
   const { user, error } = await requireAdmin(req);
   if (!user) return res.status(401).json({ error });
 
+  const allowed = [
+    "competition_title",
+    "description",
+    "venue",
+    "price_participate",
+    "registration_link",
+    "image_url",
+    "competition_date",
+    "start_time",
+    "end_time",
+  ];
+
+  const payload = {};
+  for (const k of allowed) {
+    if (req.body[k] !== undefined) payload[k] = req.body[k];
+  }
+
   const { data, error: updErr } = await admin
     .from("competition_posts")
-    .update(req.body)
+    .update(payload)
     .eq("id", req.params.id)
     .select()
     .single();
@@ -1338,6 +1482,7 @@ app.patch("/admin/competitions/:id", async (req, res) => {
   res.json({ ok: true, competition: data });
 });
 
+// ---- admin: delete competition
 app.delete("/admin/competitions/:id", async (req, res) => {
   const { user, error } = await requireAdmin(req);
   if (!user) return res.status(401).json({ error });

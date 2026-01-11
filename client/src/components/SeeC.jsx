@@ -103,9 +103,7 @@ const SeeC = () => {
   const [loading, setLoading] = useState(true);
   const [displayLimit, setDisplayLimit] = useState(INITIAL_LIMIT);
   const [selectedPost, setSelectedPost] = useState(null);
-
-  const competitionsToShow = competitions.slice(0, displayLimit);
-  const isShowingAll = displayLimit >= competitions.length;
+  const [searchTerm, setSearchTerm] = useState('');
 
   const fetchCompetitions = useCallback(async () => {
     setLoading(true);
@@ -133,11 +131,22 @@ const SeeC = () => {
     fetchCompetitions();
   }, [fetchCompetitions]);
 
+  // SEARCH LOGIC:
+  // 1. Filter the competitions based on searchTerm
+  const filteredCompetitions = competitions.filter(post =>
+      post.competition_title.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      post.venue.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
+  // 2. Slice from the FILTERED results, not the original array
+  const competitionsToShow = filteredCompetitions.slice(0, displayLimit);
+  const isShowingAll = displayLimit >= filteredCompetitions.length;
+
 const handleShowMore = () =>
-  setDisplayLimit((prev) => Math.min(prev + 3, competitions.length));
+  setDisplayLimit((prev) => Math.min(prev + 3, filteredCompetitions.length));
   const handleShowLess = () => setDisplayLimit(INITIAL_LIMIT);
 
-  // Loading state (teal/cyan themed)
+  // Loading state
   if (loading && competitions.length === 0) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-black">
@@ -172,6 +181,33 @@ const handleShowMore = () =>
             </div>
           ) : (
             <>
+              {/* SEARCH BAR */}
+              <div className="mb-10 max-w-md mx-auto">
+                <div className="relative group">
+                    <span className="absolute inset-y-0 left-0 flex items-center pl-3">
+                         <span className="text-gray-400 group-focus-within:text-yellow-500 transition-colors"></span>
+                         <i className="bx bx-search text-gray-500 absolute left-4 top-1/2 transform -translate-y-1/2 text-xl group-focus-within:text-teal-500 transition-colors" />
+                    </span>
+                    <input
+                        type="text"
+                        placeholder="Search by title or venue..."
+                        value={searchTerm}
+                        onChange={(e) => {
+                            setSearchTerm(e.target.value);
+                            setDisplayLimit(INITIAL_LIMIT); // Reset limit on search
+                         }}
+                        className="w-full pl-10 pr-10 py-3 bg-gray-800 border border-gray-700 rounded-xl focus:ring-2 focus:ring-yellow-600 outline-none transition text-white"
+                    />
+                    {searchTerm && (
+                        <button
+                            onClick={() => setSearchTerm('')}
+                            className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-500 hover:text-white"
+                        >
+                             ✕
+                        </button>
+                     )}
+                </div>
+              </div>
               {/* Grid */}
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
                 {competitionsToShow.map((post) => (
@@ -237,7 +273,7 @@ const handleShowMore = () =>
               </div>
 
               {/* Show more/less */}
-              {competitions.length > INITIAL_LIMIT && (
+              {filteredCompetitions.length > INITIAL_LIMIT && (
                 <div className="text-center mt-10">
                   {isShowingAll ? (
                     <button
@@ -255,7 +291,7 @@ const handleShowMore = () =>
                                  hover:from-teal-400 hover:to-cyan-400"
                       disabled={loading}
                     >
-                      Show More ({Math.max(competitions.length - displayLimit, 0)} remaining)
+                      Show More ({Math.max(filteredCompetitions.length - displayLimit, 0)} remaining)
                     </button>
                   )}
                 </div>

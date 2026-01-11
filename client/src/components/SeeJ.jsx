@@ -97,7 +97,10 @@ const usePublicJobs = () => {
   };
 
   const handleShowLessJobs = () => setVisibleJobCount(MAX_CARDS_DISPLAYED);
-  const handleSearchChange = (e) => setSearchTerm(e.target.value);
+  const handleSearchChange = (e) => {
+    setSearchTerm(e.target.value);
+    setVisibleJobCount(MAX_CARDS_DISPLAYED); //allow visible count to reset immediately when type
+  };
 
   return {
     state: {
@@ -249,11 +252,11 @@ const SeeJ = () => {
   }
 
   return (
-    // ✅ SeeC outer shell (box outside) but KEEP your JobCard styling inside
+    // SeeC outer shell (box outside) but KEEP your JobCard styling inside
     <div className="min-h-screen bg-black text-white font-sans">
       <div className="max-w-7xl mx-auto px-6 py-12">
         <div className="bg-gray-900 rounded-2xl p-8 border border-gray-800 shadow-2xl">
-          {/* Header like SeeC */}
+          {/* Header */}
           <div className="mb-8">
             <h2 className="text-3xl font-black tracking-tighter text-transparent bg-clip-text bg-gradient-to-r from-teal-400 via-cyan-400 to-indigo-400 mb-2">
               Job Opportunities
@@ -263,7 +266,7 @@ const SeeJ = () => {
             </p>
           </div>
 
-          {/* Search bar (keep your design) */}
+          {/* Search bar */}
           <div className="max-w-xl mb-10">
             <div className="relative group">
               <i className="bx bx-search text-gray-500 absolute left-4 top-1/2 transform -translate-y-1/2 text-xl group-focus-within:text-teal-500 transition-colors" />

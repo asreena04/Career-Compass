@@ -3,6 +3,7 @@ import { supabase } from "../supabaseClient";
 
 const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:3001";
 const OTHER_OPTION_VALUE = "OTHER_CUSTOM_SKILL";
+const today = new Date().toISOString().split("T")[0];
 
 // Must match your DB normalize_skill logic (client-side only for duplicate prevention in UI)
 const normalizeLocal = (input) => {
@@ -255,6 +256,7 @@ const JobPostForm = ({ onPostSuccess, initialData = null, isEditing = false }) =
                 name="applicationDeadline"
                 value={jobData.applicationDeadline}
                 onChange={handleChange}
+                min={today}
                 required
                 className="w-full p-3 border border-gray-600 bg-gray-800 text-white rounded-lg focus:ring-teal-500 focus:border-teal-500 transition duration-150"
               />

@@ -88,11 +88,11 @@ const AdvisorSelect = ({ id, label, value, onChange, advisors, loading }) => {
 
 const SignInForm = () => {
     const navigate = useNavigate();
-    
+
     const [isSigningIn, setIsSigningIn] = useState(false);
     const [advisors, setAdvisors] = useState([]);
     const [loadingAdvisors, setLoadingAdvisors] = useState(false);
-    
+
     // Basic form data for all users
     const [formData, setFormData] = useState({
         email: '',
@@ -100,7 +100,7 @@ const SignInForm = () => {
         confirmPassword: '',
         role: '',
     });
-    
+
     // Specific data for Academic Advisors
     const [advisorData, setAdvisorData] = useState({
         full_name: '',
@@ -108,7 +108,7 @@ const SignInForm = () => {
         position: '',
         department: ''
     });
-    
+
     // Specific data for Students
     const [studentData, setStudentData] = useState({
         full_name: '',
@@ -118,16 +118,16 @@ const SignInForm = () => {
         year_of_study: '',
         advisor_id: ''
     });
-    
+
     // Specific data for Companies - CORRECTED FIELD NAMES
     const [companyData, setCompanyData] = useState({
         company_name: '',
         website: '',
-        company_category: '', 
+        company_category: '',
         contact_link: '',
         hr_contact_name: ''
     });
-    
+
     const [profilePicture, setProfilePicture] = useState(null);
     const [message, setMessage] = useState('');
     const [error, setError] = useState(null);
@@ -180,6 +180,25 @@ const SignInForm = () => {
 
     const handleStudentChange = (e) => {
         const { name, value } = e.target;
+
+        if (name === 'year_of_study') {
+            // Convert to number for comparison
+            const val = parseInt(value, 10);
+
+            // Allow empty string so they can backspace/delete
+            if (value === '') {
+                setStudentData(prev => ({ ...prev, [name]: '' }));
+                return;
+            }
+
+            // Only update state if the value is between 1 and 4
+            if (val >= 1 && val <= 4) {
+                setStudentData(prev => ({ ...prev, [name]: value }));
+            }
+            // If it's invalid, we simply don't update the state (the input won't change)
+            return;
+        }
+
         setStudentData(prev => ({
             ...prev,
             [name]: value
@@ -216,9 +235,18 @@ const SignInForm = () => {
             return;
         }
 
+        if (role === 'Student') {
+            const year = parseInt(studentData.year_of_study, 10);
+            if (!year || year < 1 || year > 4) {
+                setError("Error: Year of study must be between 1 and 4.");
+                setIsLoading(false);
+                return;
+            }
+        }
+
         try {
             let avatar_url = null;
-            
+
             // 1. UPLOAD PROFILE PICTURE TO STORAGE
             if (profilePicture) {
                 const fileExt = profilePicture.name.split('.').pop();
@@ -239,15 +267,15 @@ const SignInForm = () => {
                     const { data: { publicUrl } } = supabase.storage
                         .from('avatars')
                         .getPublicUrl(filePath);
-                    
+
                     avatar_url = publicUrl;
                 }
             }
 
             // 2. Prepare metadata based on user role
-            let metadata = { 
-                role: role, 
-                avatar_url: avatar_url 
+            let metadata = {
+                role: role,
+                avatar_url: avatar_url
             };
 
             if (role === 'Academic Advisor') {
@@ -273,9 +301,9 @@ const SignInForm = () => {
             const { error: authError } = await supabase.auth.signUp({
                 email,
                 password,
-                options: { 
+                options: {
                     data: metadata
-                } 
+                }
             });
 
             if (authError) {
@@ -283,16 +311,16 @@ const SignInForm = () => {
                 setIsLoading(false);
                 return;
             }
-            
+
             setMessage(`Success! Check your email to confirm your account for: ${email}. You can sign in after confirmation.`);
-            
+
             // Reset form
             setFormData({ email: '', password: '', confirmPassword: '', role: '' });
             setAdvisorData({ full_name: '', room_number: '', position: '', department: '' });
             setStudentData({ full_name: '', matric_number: '', programme: '', school: '', year_of_study: '', advisor_id: '' });
             setCompanyData({ company_name: '', website: '', company_category: '', contact_link: '', hr_contact_name: '' });
             setProfilePicture(null);
-            
+
         } catch (err) {
             console.error(err);
             setError("An unexpected error occurred during sign up.");
@@ -323,7 +351,7 @@ const SignInForm = () => {
             }
 
             const { data: { user } } = await supabase.auth.getUser();
-            
+
             if (!user) {
                 setError("Login successful, but could not retrieve user session.");
                 setIsLoading(false);
@@ -334,7 +362,7 @@ const SignInForm = () => {
                 .from('profiles')
                 .select('role')
                 .eq('id', user.id)
-                .single(); 
+                .single();
 
             if (profileError) {
                 setError("Login successful, but could not retrieve user role. Did you confirm your email?");
@@ -344,7 +372,7 @@ const SignInForm = () => {
             }
 
             const userRole = profile.role;
-            
+
             switch (userRole) {
                 case 'Student':
                     navigate('/home');
@@ -355,9 +383,12 @@ const SignInForm = () => {
                 case 'Company':
                     navigate('/home');
                     break;
+                case 'Admin':
+                    navigate('/admin');
+                    break;
                 default:
                     setError("Sign in successful, but role is unrecognized.");
-                    navigate('/default-dashboard');
+                    navigate('/home');
             }
         } catch (err) {
             console.error(err);
@@ -383,32 +414,32 @@ const SignInForm = () => {
             {/* SIGN IN FORM */}
             {isSigningIn ? (
                 <form onSubmit={handleSignIn} className="space-y-6">
-                    <FormInput 
-                        id="email" 
-                        label="Email Address" 
-                        type="email" 
-                        value={formData.email} 
-                        onChange={handleChange} 
-                        placeholder="you@example.com" 
-                        autoComplete="email" 
+                    <FormInput
+                        id="email"
+                        label="Email Address"
+                        type="email"
+                        value={formData.email}
+                        onChange={handleChange}
+                        placeholder="you@example.com"
+                        autoComplete="email"
                     />
-                    <FormInput 
-                        id="password" 
-                        label="Password" 
-                        type="password" 
-                        value={formData.password} 
-                        onChange={handleChange} 
-                        placeholder="••••••••" 
-                        autoComplete="current-password" 
+                    <FormInput
+                        id="password"
+                        label="Password"
+                        type="password"
+                        value={formData.password}
+                        onChange={handleChange}
+                        placeholder="••••••••"
+                        autoComplete="current-password"
                     />
 
                     <div className="flex items-center justify-between text-sm">
                         <div className="flex items-center">
-                            <input 
-                                id="remember-me" 
-                                name="remember-me" 
-                                type="checkbox" 
-                                className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-600 rounded bg-gray-800" 
+                            <input
+                                id="remember-me"
+                                name="remember-me"
+                                type="checkbox"
+                                className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-600 rounded bg-gray-800"
                             />
                             <label htmlFor="remember-me" className="ml-2 text-gray-200">Remember me</label>
                         </div>
@@ -429,47 +460,47 @@ const SignInForm = () => {
                     {/* Basic Information Section */}
                     <div className="space-y-4">
                         <h2 className="text-xl font-bold text-white border-b border-gray-700 pb-2">Basic Information</h2>
-                        <FormInput 
-                            id="email" 
-                            label="Email Address" 
-                            type="email" 
-                            value={formData.email} 
-                            onChange={handleChange} 
-                            placeholder="you@example.com" 
-                            autoComplete="email" 
+                        <FormInput
+                            id="email"
+                            label="Email Address"
+                            type="email"
+                            value={formData.email}
+                            onChange={handleChange}
+                            placeholder="you@example.com"
+                            autoComplete="email"
                         />
-                        <RoleSelect 
-                            id="role" 
-                            label="Your Role" 
-                            value={formData.role} 
-                            onChange={handleChange} 
+                        <RoleSelect
+                            id="role"
+                            label="Your Role"
+                            value={formData.role}
+                            onChange={handleChange}
                         />
-                        <FormInput 
-                            id="profilePicture" 
-                            label="Profile Picture" 
-                            type="file" 
-                            onChange={handleChange} 
+                        <FormInput
+                            id="profilePicture"
+                            label="Profile Picture"
+                            type="file"
+                            onChange={handleChange}
                             accept="image/*"
                             required={false}
                             className="file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-indigo-500 file:text-white hover:file:bg-indigo-600 file:cursor-pointer"
                         />
-                        <FormInput 
-                            id="password" 
-                            label="Password" 
-                            type="password" 
-                            value={formData.password} 
-                            onChange={handleChange} 
-                            placeholder="••••••••" 
-                            autoComplete="new-password" 
+                        <FormInput
+                            id="password"
+                            label="Password"
+                            type="password"
+                            value={formData.password}
+                            onChange={handleChange}
+                            placeholder="••••••••"
+                            autoComplete="new-password"
                         />
-                        <FormInput 
-                            id="confirmPassword" 
-                            label="Confirm Password" 
-                            type="password" 
-                            value={formData.confirmPassword} 
-                            onChange={handleChange} 
-                            placeholder="••••••••" 
-                            autoComplete="new-password" 
+                        <FormInput
+                            id="confirmPassword"
+                            label="Confirm Password"
+                            type="password"
+                            value={formData.confirmPassword}
+                            onChange={handleChange}
+                            placeholder="••••••••"
+                            autoComplete="new-password"
                         />
                     </div>
 
@@ -477,42 +508,42 @@ const SignInForm = () => {
                     {formData.role === 'Academic Advisor' && (
                         <div className="space-y-4 pt-4 border-t border-gray-700">
                             <h2 className="text-xl font-bold text-white border-b border-gray-700 pb-2">Academic Advisor Details</h2>
-                            <FormInput 
-                                id="full_name" 
-                                label="Full Name" 
-                                type="text" 
-                                value={advisorData.full_name} 
-                                onChange={handleAdvisorChange} 
-                                placeholder="Dr. Jane Doe" 
+                            <FormInput
+                                id="full_name"
+                                label="Full Name"
+                                type="text"
+                                value={advisorData.full_name}
+                                onChange={handleAdvisorChange}
+                                placeholder="Dr. Jane Doe"
                                 autoComplete="name"
                             />
-                            <FormInput 
-                                id="room_number" 
-                                label="Room Number" 
-                                type="text" 
-                                value={advisorData.room_number} 
-                                onChange={handleAdvisorChange} 
-                                placeholder="520" 
+                            <FormInput
+                                id="room_number"
+                                label="Room Number"
+                                type="text"
+                                value={advisorData.room_number}
+                                onChange={handleAdvisorChange}
+                                placeholder="520"
                                 autoComplete="off"
                                 required={false}
                             />
-                            <FormInput 
-                                id="position" 
-                                label="Position" 
-                                type="text" 
-                                value={advisorData.position} 
-                                onChange={handleAdvisorChange} 
-                                placeholder="Senior Lecturer" 
+                            <FormInput
+                                id="position"
+                                label="Position"
+                                type="text"
+                                value={advisorData.position}
+                                onChange={handleAdvisorChange}
+                                placeholder="Senior Lecturer"
                                 autoComplete="organization-title"
                                 required={false}
                             />
-                            <FormInput 
-                                id="department" 
-                                label="Department" 
-                                type="text" 
-                                value={advisorData.department} 
-                                onChange={handleAdvisorChange} 
-                                placeholder="Computer Science" 
+                            <FormInput
+                                id="department"
+                                label="Department"
+                                type="text"
+                                value={advisorData.department}
+                                onChange={handleAdvisorChange}
+                                placeholder="Computer Science"
                                 autoComplete="off"
                                 required={false}
                             />
@@ -523,54 +554,56 @@ const SignInForm = () => {
                     {formData.role === 'Student' && (
                         <div className="space-y-4 pt-4 border-t border-gray-700">
                             <h2 className="text-xl font-bold text-white border-b border-gray-700 pb-2">Student Details</h2>
-                            <FormInput 
-                                id="full_name" 
-                                label="Full Name" 
-                                type="text" 
-                                value={studentData.full_name} 
-                                onChange={handleStudentChange} 
-                                placeholder="John Doe" 
+                            <FormInput
+                                id="full_name"
+                                label="Full Name"
+                                type="text"
+                                value={studentData.full_name}
+                                onChange={handleStudentChange}
+                                placeholder="John Doe"
                                 autoComplete="name"
                             />
-                            <FormInput 
-                                id="matric_number" 
-                                label="Matric Number" 
-                                type="text" 
-                                value={studentData.matric_number} 
-                                onChange={handleStudentChange} 
-                                placeholder="22301234" 
+                            <FormInput
+                                id="matric_number"
+                                label="Matric Number"
+                                type="text"
+                                value={studentData.matric_number}
+                                onChange={handleStudentChange}
+                                placeholder="22301234"
                                 autoComplete="off"
                                 required={false}
                             />
-                            <FormInput 
-                                id="programme" 
-                                label="Programme" 
-                                type="text" 
-                                value={studentData.programme} 
-                                onChange={handleStudentChange} 
-                                placeholder="Software Engineering" 
+                            <FormInput
+                                id="programme"
+                                label="Programme"
+                                type="text"
+                                value={studentData.programme}
+                                onChange={handleStudentChange}
+                                placeholder="Software Engineering"
                                 autoComplete="off"
                                 required={false}
                             />
-                            <FormInput 
-                                id="school" 
-                                label="School" 
-                                type="text" 
-                                value={studentData.school} 
-                                onChange={handleStudentChange} 
-                                placeholder="Computer Science" 
+                            <FormInput
+                                id="school"
+                                label="School"
+                                type="text"
+                                value={studentData.school}
+                                onChange={handleStudentChange}
+                                placeholder="Computer Science"
                                 autoComplete="off"
                                 required={false}
                             />
-                            <FormInput 
-                                id="year_of_study" 
-                                label="Year of Study" 
-                                type="number" 
-                                value={studentData.year_of_study} 
-                                onChange={handleStudentChange} 
-                                placeholder="1" 
+                            <FormInput
+                                id="year_of_study"
+                                label="Year of Study"
+                                type="number"
+                                value={studentData.year_of_study}
+                                onChange={handleStudentChange}
+                                placeholder="1/2/3/4"
                                 autoComplete="off"
-                                required={false}
+                                required={true}
+                                min="1"
+                                max="4"
                             />
                             <AdvisorSelect
                                 id="advisor_id"
@@ -587,22 +620,22 @@ const SignInForm = () => {
                     {formData.role === 'Company' && (
                         <div className="space-y-4 pt-4 border-t border-gray-700">
                             <h2 className="text-xl font-bold text-white border-b border-gray-700 pb-2">Company Details</h2>
-                            <FormInput 
-                                id="company_name" 
-                                label="Company Name" 
-                                type="text" 
-                                value={companyData.company_name} 
-                                onChange={handleCompanyChange} 
-                                placeholder="Company Sdn Bhd" 
+                            <FormInput
+                                id="company_name"
+                                label="Company Name"
+                                type="text"
+                                value={companyData.company_name}
+                                onChange={handleCompanyChange}
+                                placeholder="Company Sdn Bhd"
                                 autoComplete="organization"
                             />
-                            <FormInput 
-                                id="website" 
-                                label="Website (Optional)" 
-                                type="url" 
-                                value={companyData.website} 
-                                onChange={handleCompanyChange} 
-                                placeholder="https://example.com" 
+                            <FormInput
+                                id="website"
+                                label="Website (Optional)"
+                                type="url"
+                                value={companyData.website}
+                                onChange={handleCompanyChange}
+                                placeholder="https://example.com"
                                 autoComplete="url"
                                 required={false}
                             />
@@ -612,23 +645,23 @@ const SignInForm = () => {
                                 value={companyData.company_category}
                                 onChange={handleCompanyChange}
                             />
-                            <FormInput 
-                                id="contact_link" 
-                                label="Contact Link" 
-                                type="url" 
-                                value={companyData.contact_link} 
-                                onChange={handleCompanyChange} 
-                                placeholder="https://linkedin.com/company/..." 
+                            <FormInput
+                                id="contact_link"
+                                label="Contact Link"
+                                type="url"
+                                value={companyData.contact_link}
+                                onChange={handleCompanyChange}
+                                placeholder="https://linkedin.com/company/..."
                                 autoComplete="url"
                                 required={false}
                             />
-                            <FormInput 
-                                id="hr_contact_name" 
-                                label="HR Contact Name (Optional)" 
-                                type="text" 
-                                value={companyData.hr_contact_name} 
-                                onChange={handleCompanyChange} 
-                                placeholder="Jane Smith" 
+                            <FormInput
+                                id="hr_contact_name"
+                                label="HR Contact Name (Optional)"
+                                type="text"
+                                value={companyData.hr_contact_name}
+                                onChange={handleCompanyChange}
+                                placeholder="Jane Smith"
                                 autoComplete="name"
                                 required={false}
                             />
@@ -644,12 +677,12 @@ const SignInForm = () => {
                     </button>
                 </form>
             )}
-            
+
             {/* Mode toggle */}
             <p className="mt-8 text-center text-sm text-gray-400">
                 {isSigningIn ? "Don't have an account? " : "Already have an account? "}
-                <button 
-                    type="button" 
+                <button
+                    type="button"
                     onClick={() => {
                         setIsSigningIn(!isSigningIn);
                         setError(null);

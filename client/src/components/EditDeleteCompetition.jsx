@@ -2,12 +2,16 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../supabaseClient';
 import { v4 as uuidv4 } from 'uuid';
 
+// 1. Initial limit & Max file size
 const INITIAL_LIMIT = 3;
-const inputClasses = "w-full p-3 border border-gray-600 bg-gray-800 text-white rounded-lg focus:ring-yellow-500 focus:border-yellow-500 transition duration-150 placeholder-gray-400";
 const MAX_FILE_SIZE = 5 * 1024 * 1024;
+const today = new Date().toISOString().split("T")[0];
 
-// Reusable "input" field component
-const FormInput = ({ label, id, name, type = 'text', value, onChange, placeholder, required = false, disabled = false }) => (
+// 1.1 Reusable inputClasses for both input and textarea
+const inputClasses = "w-full p-3 border border-gray-600 bg-gray-800 text-white rounded-lg focus:ring-yellow-500 focus:border-yellow-500 transition duration-150 placeholder-gray-400";
+
+// 1.2 Reusable "input" field component
+const FormInput = ({ label, type = 'text', id, name, value, onChange, required = false, disabled = false, placeholder, min }) => (
     <div className="space-y-2">
 
         <label htmlFor={id} className="block text-sm font-semibold text-gray-300">
@@ -23,14 +27,15 @@ const FormInput = ({ label, id, name, type = 'text', value, onChange, placeholde
             required={required}
             disabled={disabled}
             placeholder={placeholder}
+            min={min}
             className={inputClasses}
         />
 
     </div>
 );
 
-// Reusable "textarea" field component
-const FormTextarea = ({ label, id, name, value, onChange, placeholder, rows = 3, required = false }) => (
+// 1.3 Reusable "textarea" field component
+const FormTextarea = ({ label, id, name, value, onChange, required = false, placeholder, rows = 3 }) => (
     <div className="space-y-2">
 
         <label htmlFor={id} className="block text-sm font-semibold text-gray-300">
@@ -44,13 +49,14 @@ const FormTextarea = ({ label, id, name, value, onChange, placeholder, rows = 3,
             onChange={onChange}
             required={required}
             placeholder={placeholder}
-            className={inputClasses}
             rows={rows}
+            className={inputClasses}
         ></textarea>
+
     </div>
 );
 
-// Helper function to map "database object keys" to "form state keys"
+// 2. Helper function to map "database object keys" to "form state keys"
 const mapPostToEditData = (post) => ({
     id: post.id,
     title: post.competition_title,
@@ -64,10 +70,10 @@ const mapPostToEditData = (post) => ({
     currentImageUrl: post.image_url || null,
 });
 
-// Main component
+// 3. Main component
 const EditDeleteCompetition = () => {
 
-    // State management
+    // 3.1 State management
     const [competitions, setCompetitions] = useState([]);
     const [loading, setLoading] = useState(true);
     const [editingPost, setEditingPost] = useState(null);
@@ -76,48 +82,58 @@ const EditDeleteCompetition = () => {
     const [imageError, setImageError] = useState(null);
     const [displayLimit, setDisplayLimit] = useState(INITIAL_LIMIT);
 
-    // Store currently logged-in user's ID
+    // 3.2 Store currently logged-in user's ID
     const [currentUserId, setCurrentUserId] = useState(null);
 
-    // How many post to display on screen?
+    // 3.3 How many post to display on screen?
     const competitionsToShow = competitions.slice(0, displayLimit);
     const isShowingAll = displayLimit >= competitions.length;
 
-    // Function to handle new file select for update
+    // 3.4 Function to handle update new image file
     const handleImageChange = (e) => {
+
+        // 3.4.1 Image file select by user
         const file = e.target.files[0];
         setImageError(null);
 
-        // Update image error
+        // Error occur when trying to update image file
+
+        // 3.4.2 No image file select by user
         if (!file) {
             setEditImageFile(null);
             return;
         }
 
+        // 3.4.3 Not valid image file type
         if (!file.type.startsWith('image/')) {
             setImageError('Please select a valid image file (jpg, png, etc.).');
             setEditImageFile(null);
             return;
         }
 
+        // 3.4.4 Image file size exceed limit
         if (file.size > MAX_FILE_SIZE) {
             setImageError(`File size must be less than ${MAX_FILE_SIZE / 1024 / 1024}MB.`);
             setEditImageFile(null);
             return;
         }
 
-        // Successfully update image
+        // 3.4.5 Can update image file now
         setEditImageFile(file);
     };
 
-    // Function to upload new image to supabase storage bucket
+    // 3.5 Function to upload new image file into supabase 'competition_images' bucket
     const uploadNewImage = async (file) => {
+
+        // 3.5.1 If no file select by user, set image to previous image, and show upload error message
         if (!file) return { newImageUrl: editData.currentImageUrl || null, uploadError: null };
 
+        // 3.5.2 Make sure image file is valid
         const fileExtension = file.name.split('.').pop();
         const fileName = `${uuidv4()}.${fileExtension}`;
         const filePath = `competition_images/${fileName}`;
 
+        // 3.5.3 Try to upload file into supabase 'competition_images' bucket
         const { error: uploadError } = await supabase.storage
             .from('competition_images')
             .upload(filePath, file, {
@@ -125,22 +141,26 @@ const EditDeleteCompetition = () => {
                 upsert: false
             });
 
+        // 3.5.4 Upload error occur, cannot access new image file's in supabase, display upload error message
         if (uploadError) {
             console.error('❌ Supabase Image Upload Error:', uploadError);
             return { newImageUrl: null, uploadError };
         }
 
-        // To know filePath in supabase to upload image into supabase
+        // 3.5.5 Get filePath in supabase 'competition_images' bucket to upload image into supabase 'competition_images' bucket
         const { data: publicUrlData } = supabase.storage
             .from('competition_images')
             .getPublicUrl(filePath);
         return { newImageUrl: publicUrlData.publicUrl, uploadError: null };
     };
 
-    // Function to delete image from supabase storage bucket
+    // 3.6 Function to delete image file from supabase 'competition_images' bucket
     const deleteImageFromStorage = async (imageUrl) => {
+
+        // 3.6.1 If cannot access image file in supabase 'competition_images' bucket means successfully delete image file from supabase 'competition_images' bucket
         if (!imageUrl) return { success: true, error: null };
 
+        // 3.6.2 Use only imageUrl (no competition_images/) to find filePath in supabase 'competition_images' bucket to be deleted later
         const parts = imageUrl.split('competition_images/');
         if (parts.length < 2) {
              console.warn('Could not parse image URL for deletion:', imageUrl);
@@ -148,71 +168,74 @@ const EditDeleteCompetition = () => {
         }
         const filePath = `competition_images/${parts[1]}`;
 
+        // 3.6.3 Try to delete image file from supabase 'competition_images' bucket
         const { error: deleteError } = await supabase.storage
             .from('competition_images')
             .remove([filePath]);
 
+        // 3.6.4 Cannot delete image file from supabase 'competition_images' bucket, display deletion error message
         if (deleteError) {
             console.error('❌ Supabase Image Deletion Error:', deleteError);
             return { success: false, error: deleteError };
         }
 
+        // 3.6.5 Successfully delete image file from supabase 'competition_images' bucket
         return { success: true, error: null };
     };
 
-    // Fetch data from supabase, filtered by currentUserId
+    // 3.7 Fetch all previously post's competition data from supabase 'competition_posts' table, filtered by currentUserId (user that currently log in)
     const fetchCompetitions = useCallback(async () => {
-        // Stop if current user not the one who create the post
+
+        // 3.7.1 Stop the action when currently log in user not the one who create the post
         if (!currentUserId) {
             setLoading(false);
             return;
         }
-
         setLoading(true);
 
+        // 3.7.2 Only fetch all previously post's competition data create by the currently log in user from supabase 'competition_posts' table
         const { data, error } = await supabase
             .from('competition_posts')
             .select('*')
-            // Only fetch post created by current user
             .eq('user_id', currentUserId)
             .order('id', { ascending: false });
 
+        // 3.7.3 Error occur when trying to fetch data from supabase, display error message & alert
         if (error) {
             console.error('Error fetching competitions:', error);
             alert('Failed to load competition data.');
         }
-        else { // Successfully fetch data from supabase
-            setCompetitions(data);
-        }
-        setLoading(false);
-    }, [currentUserId]); // Re-run when currentUserId changes
 
-    // Get current user's ID
+        // 3.7.4 Successfully fetch data from supabase
+        else { setCompetitions(data); }
+        setLoading(false);
+    }, [currentUserId]); // Re-run when currentUserId change
+
+    // 3.8 useEffect to get currently log in user's ID
     useEffect(() => {
-        // Get session to know current user's ID
         supabase.auth.getSession().then(({ data: { session } }) => {
-            if (session) {
-                setCurrentUserId(session.user.id);
-            } else {
-                // No user currently log in
-                setLoading(false);
-            }
+            if (session) { setCurrentUserId(session.user.id); }
+            else { setLoading(false); }
         });
     }, []);
 
+    // 3.9 useEffect to only fetch all previously post's competition data create by the currently log in user from supabase 'competition_posts' table
     useEffect(() => {
         if (currentUserId) {
             fetchCompetitions();
         }
-    }, [fetchCompetitions, currentUserId]);
+    }, [fetchCompetitions, currentUserId]); // Re-run when fetchCompetitions and currentUserId is change
 
-    // Handle form input changes for modal
+    // 3.10 Handle form's field content change when editing in the modal
     const handleEditChange = (e) => {
         const { name, value } = e.target;
-        setEditData(prev => ({ ...prev, [name]: value }));
+        setEditData(prev => ({
+            ...prev,
+            [name]: value
+        }));
     };
 
-    // Prepare modal for edit specific post
+    // 3.11 Prepare modal for edit specific post. Modal purpose is to allow user to edit post's competition data
     const startEdit = (post) => {
         setEditingPost(post);
         setEditData(mapPostToEditData(post));
@@ -220,14 +243,22 @@ const EditDeleteCompetition = () => {
         setImageError(null);
     };
 
-    // Save changes to supabase
+    // 3.12 Save change to supabase 'competition_posts' table & supabase 'competition_images' bucket
     const saveEdit = async (e) => {
         e.preventDefault();
+
+        if (editData.startTime && editData.endTime) {
+        if (editData.startTime >= editData.endTime) {
+            alert("❌ Validation Error: End Time must be later than Start Time.");
+            return;
+        }
+    }
+
+        // 3.12.1 Save change fail
         if (!editData.id || imageError) return;
 
+        // 3.12.2 Try upload new image file
         setLoading(true);
-
-        // Handle image update
         let newImageUrl = editData.currentImageUrl;
         let uploadError = null;
 
@@ -236,6 +267,7 @@ const EditDeleteCompetition = () => {
             newImageUrl = uploadResult.newImageUrl;
             uploadError = uploadResult.uploadError;
 
+            // 3.12.2.1 Error occur when upload new image file, display upload error message
             if (uploadError) {
                 setLoading(false);
                 alert(`Image upload failed: ${uploadError.message}. Post not updated.`);
@@ -243,7 +275,7 @@ const EditDeleteCompetition = () => {
             }
         }
 
-        // Prepare database payload
+        // 3.12.3 Prepare data for database insertion, after change other field's content or upload new image file
         const updatePayload = {
             competition_title: editData.title,
             description: editData.description,
@@ -256,84 +288,84 @@ const EditDeleteCompetition = () => {
             image_url: newImageUrl,
         };
 
-        // Update database
+        // 3.12.4 Update supabase 'competition_posts' table with latest content
         const { error: dbError } = await supabase
             .from('competition_posts')
             .update(updatePayload)
             .eq('id', editData.id);
-
         setLoading(false);
 
+        // 3.12.5 Database error or successfully update database with latest content
         if (dbError) {
             alert(`Update Failed: ${dbError.message}`);
         }
         else {
             alert('Competition updated successfully! ✅');
 
-            // Clean up old image from storage if new one was successfully uploaded
+            // 3.12.5.1 Delete old image from supabase storage if the new one was successfully uploaded
             if (editImageFile && editData.currentImageUrl && newImageUrl !== editData.currentImageUrl) {
-                 await deleteImageFromStorage(editData.currentImageUrl);
+                await deleteImageFromStorage(editData.currentImageUrl);
             }
-
             setEditingPost(null);
 
-            // Update state directly instead of re-fetching entire list
+            // 3.12.5.2 Instead of re-fetching entire list, it update state directly
             const updatedPost = {
                 ...editingPost,
                 ...updatePayload,
                 image_url: newImageUrl,
-                user_id: currentUserId // Keep user_id stable
+                user_id: currentUserId
             };
-
             setCompetitions(prevCompetitions =>
                 prevCompetitions.map(c => c.id === editData.id ? updatedPost : c)
             );
         }
     };
 
-    // Delete competition post from supabase
+    // 3.13 Delete competition post from supabase
     const handleDelete = async (postId, postTitle, imageUrl) => {
+
+        // 3.13.1 Alert "Confirm Delete" competition post
         if (!window.confirm(`⚠️ CONFIRM DELETION:\nAre you sure you want to permanently delete: "${postTitle}"?`)) {
             return;
         }
 
+        // 3.13.2 Delete image of that competition post from supabase storage bucket
         setLoading(true);
-
-        // Delete image from supabase storage bucket
         if (imageUrl) {
             const { error: imageDeleteError } = await deleteImageFromStorage(imageUrl);
+
+            // 3.13.3 Delete image error occur, display error message
             if (imageDeleteError) {
                 console.error('Image deletion failed, proceeding with DB deletion:', imageDeleteError);
                 alert(`Warning: Image deletion failed: ${imageDeleteError.message}. The post will be deleted from the database.`);
             }
         }
 
-        // Delete database record
+        // 3.13.3 Delete supabase 'competition_posts' record
         const { error: dbError } = await supabase
             .from('competition_posts')
             .delete()
             .eq('id', postId);
 
+        // 3.13.4 Database deletion error or successfully delete competition post
         setLoading(false);
-
-        if (dbError) {
-            alert(`Deletion Failed: ${dbError.message}`);
-        }
+        if (dbError) { alert(`Deletion Failed: ${dbError.message}`); }
         else {
             alert('Competition deleted successfully! 🗑️');
 
-            // Update state directly instead of re-fetching entire list
+            // 3.13.4.1 Instead of re-fetching entire list, it update state directly
             setCompetitions(prevCompetitions =>
                 prevCompetitions.filter(c => c.id !== postId)
             );
         }
+
     };
 
-    // UI logic for show more / show less post
+    // 3.14 UI logic for handle show more or show less competition post
     const handleShowMore = () => setDisplayLimit(prevLimit => prevLimit + 3);
     const handleShowLess = () => setDisplayLimit(INITIAL_LIMIT);
 
-    // Initial loading screen
+    // 3.15 Loading before user ID is known
     if (loading && currentUserId === null) {
         return (
             <div className="min-h-screen flex items-center justify-center bg-black">
@@ -342,7 +374,7 @@ const EditDeleteCompetition = () => {
         );
     }
 
-    // Loading after user ID is known
+    // 3.16 Loading after user ID is known
     if (loading && competitions.length === 0) {
         return (
             <div className="min-h-screen flex items-center justify-center bg-black">
@@ -351,17 +383,25 @@ const EditDeleteCompetition = () => {
         );
     }
 
+
+
+
+
+    // 3.17 Main return
     return (
         <div className="min-h-screen p-8 bg-gray-750 text-white">
-            <div className="max-w-6xl mx-auto">
-                <h2 className="text-4xl font-extrabold text-yellow-400 text-center mb-10 border-b border-gray-700 pb-4">🏆 Manage Your Competition Posts</h2>
 
-                {/* Display all post */}
+            {/* 3.17.1 Outside Edit Modal */}
+            <div className="max-w-6xl mx-auto">
+
+                {/* 3.17.1.1 Display all post card */}
                 <div className="space-y-4">
                     {competitionsToShow.map((post) => (
+
+                        // 3.17.1.1.1 Each post card
                         <div key={post.id} className="bg-gray-900 p-6 rounded-xl flex flex-col lg:flex-row justify-between items-start lg:items-center border border-gray-700 hover:border-yellow-500 transition shadow-lg">
 
-                            {/* Image */}
+                            {/* 3.17.1.1.1.1 Post's Image */}
                             {post.image_url && (
                                 <img
                                     src={post.image_url}
@@ -370,7 +410,7 @@ const EditDeleteCompetition = () => {
                                 />
                             )}
 
-                            {/* Title & Date & Time & Venye & Price & Registration Link */}
+                            {/* 3.17.1.1.1.2 Post's Title, Date, Time, Venue, Price & Registration Link */}
                             <div className="flex-grow mb-4 lg:mb-0">
                                 <p className="text-2xl font-bold text-yellow-300 mb-1">{post.competition_title}</p>
                                 <div className="text-sm text-gray-400 space-y-1">
@@ -384,17 +424,18 @@ const EditDeleteCompetition = () => {
                                 </div>
                             </div>
 
-                            {/* Edit & Delete Button */}
+                            {/* 3.17.1.1.1.3 Edit & Delete Button */}
                             <div className="flex space-x-3 flex-shrink-0">
                                 <button onClick={() => startEdit(post)} className="px-5 py-2 bg-yellow-600 text-gray-900 font-bold rounded-lg hover:bg-yellow-700 transition shadow-md">✏️ Edit</button>
                                 <button onClick={() => handleDelete(post.id, post.competition_title, post.image_url)} disabled={loading} className="px-5 py-2 bg-red-600 text-white font-bold rounded-lg hover:bg-red-700 transition disabled:bg-gray-600 shadow-md">🗑️ Delete</button>
                             </div>
 
-                        </div>
-                    ))}
-                </div>
+                        </div> // End each post card
 
-                {/* Show more & show less button control */}
+                    ))}
+                </div> {/* End display all post card */}
+
+                {/* 3.17.1.2 Show more & show less button control */}
                 {competitions.length > INITIAL_LIMIT && (
                     <div className="text-center mt-8">
                         {isShowingAll
@@ -406,27 +447,31 @@ const EditDeleteCompetition = () => {
                     </div>
                 )}
 
-                {/* No competition post yet message */}
+                {/* 3.17.1.3 No competition post yet message */}
                 {competitions.length === 0 && !loading && (
                     <div className="text-center p-20 bg-gray-900 rounded-xl mt-10 border border-gray-800">
                         <p className="text-2xl text-gray-500 italic">No competitions found. Start creating one! 😔</p>
                     </div>
                 )}
+
             </div>
 
-            {/* Edit modal */}
+            {/* 3.17.2 Inside Edit Modal */}
             {editingPost && (
                 <div className="fixed inset-0 bg-black bg-opacity-85 flex items-center justify-center p-4 z-50 backdrop-blur-sm">
                     <form onSubmit={saveEdit} className="bg-gray-900 p-8 rounded-xl max-w-3xl w-full shadow-2xl border border-yellow-700 transition-all overflow-y-auto max-h-full">
+                        {/* 3.17.2.1 Title */}
                         <h3 className="text-3xl font-bold text-yellow-400 mb-6 border-b border-gray-700 pb-3">✏️ Edit: {editingPost.competition_title}</h3>
 
                         <div className="space-y-6">
 
-                            {/* Image section */}
+                            {/* 3.17.2.1.1 Image Section */}
                             <div className="space-y-4 p-4 border border-gray-700 rounded-lg">
+
+                                {/* 3.17.2.1.1.1 Image Title */}
                                 <h4 className="text-lg font-semibold text-yellow-500">Competition Image</h4>
 
-                                {/* Image preview */}
+                                {/* 3.17.2.1.1.2 Image Show */}
                                 {editData.currentImageUrl && !editImageFile && (
                                     <div className="mb-4">
                                         <p className="text-sm text-gray-400 mb-2">Current Image:</p>
@@ -438,7 +483,7 @@ const EditDeleteCompetition = () => {
                                     </div>
                                 )}
 
-                                {/* Update image */}
+                                {/* 3.17.2.1.1.3 Update New Image Button */}
                                 <label htmlFor="editImage" className="block text-sm font-semibold text-gray-300">Change/Upload New Image</label>
                                 <input
                                     type="file"
@@ -449,37 +494,48 @@ const EditDeleteCompetition = () => {
                                     className="w-full file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-yellow-500 file:text-gray-900 hover:file:bg-yellow-600 p-3 border border-gray-600 bg-gray-800 text-white rounded-lg transition duration-150"
                                 />
 
-                                {imageError && (
-                                    <p className="text-sm text-red-400 mt-2">🚨 {imageError}</p>
-                                )}
-                                {editImageFile && !imageError && (
-                                    <p className="text-sm text-yellow-400 mt-2">New file selected: {editImageFile.name}</p>
-                                )}
+                                {/* 3.17.2.1.1.4 Error Message When Upload New Image Fail */}
+                                {imageError && (<p className="text-sm text-red-400 mt-2">🚨 {imageError}</p>)}
+
+                                {/* 3.17.2.1.1.5 Successfully Upload New Image Message */}
+                                {editImageFile && !imageError && (<p className="text-sm text-yellow-400 mt-2">New file selected: {editImageFile.name}</p>)}
                             </div>
 
-                            {/* Input fields using reusable FormInput/FormTextarea components */}
+                            {/* 3.17.2.2 All competition post's input field reused the FormInput/FormTextarea component */}
+
+                            {/* 3.17.2.2.1 Title & Date */}
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 <FormInput label="Competition Title" id="edit-title" name="title" value={editData.title || ''} onChange={handleEditChange} required placeholder="e.g., Annual Coding Challenge 2025"/>
-                                <FormInput label="Date of Competition" id="edit-date" name="dateCompetition" type="date" value={editData.dateCompetition || ''} onChange={handleEditChange} required />
+                                <FormInput label="Date of Competition" id="edit-date" name="dateCompetition" type="date" value={editData.dateCompetition || ''} onChange={handleEditChange} min={today} required />
                             </div>
 
+                            {/* 3.17.2.2.2 Description */}
                             <FormTextarea label="Competition Description" id="edit-desc" name="description" value={editData.description || ''} onChange={handleEditChange} required placeholder="Detail the rules, prizes, and target audience for the competition." />
 
+                            {/* 3.17.2.2.3 Start Time, End Time, Venue */}
                             <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
                                 <FormInput label="Start Time" id="edit-start" name="startTime" type="time" value={editData.startTime || ''} onChange={handleEditChange} required />
                                 <FormInput label="End Time" id="edit-end" name="endTime" type="time" value={editData.endTime || ''} onChange={handleEditChange} required />
                                 <FormInput label="Venue" id="edit-venue" name="venue" value={editData.venue || ''} onChange={handleEditChange} required placeholder="e.g., Main Auditorium, Online" />
+                                {editData.startTime && editData.endTime && editData.startTime >= editData.endTime && (
+                                    <p className="col-span-full text-red-400 text-xs mt-1 italic">
+                                    * Start time must be before end time.
+                                    </p>
+                                )}
                             </div>
 
+
+                            {/* 3.17.2.2.4 Participation Fee & Registration Link */}
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 <FormInput label="Participation Fee" id="edit-price" name="priceParticipate" value={editData.priceParticipate || ''} onChange={handleEditChange} required placeholder="e.g., $20, Free, RM50" />
                                 <FormInput label="Registration Link" id="edit-link" name="registrationLink" type="url" value={editData.registrationLink || ''} onChange={handleEditChange} required placeholder="https://eventbrite.com/register-competition" />
                             </div>
 
-                            {/* Action Buttons */}
+                            {/* 3.17.2.2.5 Cancel & Save Changes Button */}
                             <div className="flex justify-end space-x-4 pt-4">
                                 <button type="button" onClick={() => setEditingPost(null)} className="px-6 py-2 border border-gray-600 text-gray-300 rounded-lg hover:bg-gray-700 transition">Cancel</button>
                                 <button type="submit" disabled={loading || imageError} className="px-6 py-2 bg-yellow-600 text-gray-900 font-bold rounded-lg hover:bg-yellow-700 transition disabled:bg-gray-500 disabled:text-gray-300 flex items-center">
+                                    {/* 3.17.2.2.5.1 Animation occur when save changes button was click */}
                                     {loading
                                     ?
                                         (<>
@@ -500,6 +556,12 @@ const EditDeleteCompetition = () => {
 
         </div>
     );
+
+
+
+
+
+
 
 };
 export default EditDeleteCompetition;

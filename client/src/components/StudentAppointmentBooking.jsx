@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../supabaseClient';
-import { FiCalendar, FiClock, FiUser, FiCheck, FiX, FiMail, FiMapPin, FiBriefcase, FiBookOpen, FiAlertCircle } from 'react-icons/fi';
+import { FiCalendar, FiClock, FiUser, FiCheck, FiX, FiMail, FiMapPin, FiBriefcase, FiBookOpen, FiAlertCircle, FiAward } from 'react-icons/fi';
 
 const StudentAppointmentBooking = () => {
   const [selectedDate, setSelectedDate] = useState('');
@@ -14,6 +14,7 @@ const StudentAppointmentBooking = () => {
   const [studentInfo, setStudentInfo] = useState(null);
   const [error, setError] = useState('');
   const [existingAppointmentOnDate, setExistingAppointmentOnDate] = useState(null);
+  const [appointmentType, setAppointmentType] = useState('regular');
 
   useEffect(() => {
     fetchStudentAndAdvisor();
@@ -118,7 +119,7 @@ const StudentAppointmentBooking = () => {
 
       const { data: existingAppts } = await supabase
         .from('appointments')
-        .select('id, start_time, end_time, status')
+        .select('id, start_time, end_time, status, appointment_type')
         .eq('student_id', user.id)
         .eq('appointment_date', selectedDate)
         .in('status', ['pending', 'confirmed'])
@@ -203,8 +204,7 @@ const StudentAppointmentBooking = () => {
     setAvailableSlots(slots);
   };
 
-  const handleBookAppointment = async (e) => {
-    e.preventDefault();
+  const handleBookAppointment = async () => {
     setLoading(true);
     setMessage({ type: '', text: '' });
 
@@ -270,7 +270,8 @@ const StudentAppointmentBooking = () => {
           start_time: slot.start,
           end_time: slot.end,
           status: 'pending',
-          notes: notes
+          notes: notes,
+          appointment_type: appointmentType
         });
 
       if (error) {
@@ -291,10 +292,12 @@ const StudentAppointmentBooking = () => {
         }
       } else {
         console.log('✅ Appointment booked successfully');
-        setMessage({ type: 'success', text: 'Appointment booked successfully! Your advisor will confirm shortly.' });
+        const appointmentTypeText = appointmentType === 'practice_interview' ? 'practice interview session' : 'appointment';
+        setMessage({ type: 'success', text: `${appointmentTypeText.charAt(0).toUpperCase() + appointmentTypeText.slice(1)} booked successfully! Your advisor will confirm shortly.` });
         setSelectedDate('');
         setSelectedTime('');
         setNotes('');
+        setAppointmentType('regular');
         setAvailableSlots([]);
         setExistingAppointmentOnDate(null);
       }
@@ -308,6 +311,8 @@ const StudentAppointmentBooking = () => {
 
   const minDate = new Date().toISOString().split('T')[0];
   const maxDate = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+
+  const isYear4Student = studentInfo?.year_of_study === 4;
 
   if (pageLoading) {
     return (
@@ -355,7 +360,7 @@ const StudentAppointmentBooking = () => {
                       <img 
                         src={advisorInfo.profiles.avatar_url} 
                         alt={advisorInfo.full_name}
-                        className="w-32 h-32 rounded-full border-4 border-cyan-500 object-fit shadow-lg"
+                        className="w-32 h-32 rounded-full border-4 border-cyan-500 object-cover shadow-lg"
                       />
                     ) : (
                       <div className="w-32 h-32 rounded-full border-4 border-cyan-500 bg-gradient-to-br from-cyan-600 to-indigo-600 flex items-center justify-center shadow-lg">
@@ -424,7 +429,7 @@ const StudentAppointmentBooking = () => {
                   <div>
                     <p className="font-semibold mb-1">Existing Appointment</p>
                     <p className="text-sm">
-                      You already have an appointment on this date at{' '}
+                      You already have {existingAppointmentOnDate.appointment_type === 'practice_interview' ? 'a practice interview session' : 'an appointment'} on this date at{' '}
                       {existingAppointmentOnDate.start_time.slice(0, 5)} - {existingAppointmentOnDate.end_time.slice(0, 5)}.
                       Only 1 appointment is allowed per day. Please cancel your existing appointment to book another one.
                     </p>
@@ -432,7 +437,60 @@ const StudentAppointmentBooking = () => {
                 </div>
               )}
 
-              <form onSubmit={handleBookAppointment} className="space-y-6">
+              <div className="space-y-6">
+                {isYear4Student && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-300 mb-3">
+                      Appointment Type
+                    </label>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <button
+                        type="button"
+                        onClick={() => setAppointmentType('regular')}
+                        className={`p-4 rounded-xl border transition-all ${
+                          appointmentType === 'regular'
+                            ? 'bg-cyan-600 border-cyan-500 text-white shadow-lg shadow-cyan-500/30'
+                            : 'bg-gray-800 border-gray-700 text-gray-300 hover:border-cyan-500/50'
+                        }`}
+                      >
+                        <div className="flex items-center justify-center gap-2 mb-2">
+                          <FiCalendar size={20} />
+                          <span className="font-semibold">Regular Appointment</span>
+                        </div>
+                        <p className="text-sm opacity-80">General academic advising</p>
+                      </button>
+                      
+                      <button
+                        type="button"
+                        onClick={() => setAppointmentType('practice_interview')}
+                        className={`p-4 rounded-xl border transition-all ${
+                          appointmentType === 'practice_interview'
+                            ? 'bg-gradient-to-r from-purple-600 to-pink-600 border-purple-500 text-white shadow-lg shadow-purple-500/30'
+                            : 'bg-gray-800 border-gray-700 text-gray-300 hover:border-purple-500/50'
+                        }`}
+                      >
+                        <div className="flex items-center justify-center gap-2 mb-2">
+                          <FiAward size={20} />
+                          <span className="font-semibold">Practice Interview</span>
+                        </div>
+                        <p className="text-sm opacity-80">Job interview preparation</p>
+                      </button>
+                    </div>
+                    
+                    {appointmentType === 'practice_interview' && (
+                      <div className="mt-4 p-4 rounded-xl bg-purple-900/20 border border-purple-700/50">
+                        <p className="text-purple-300 text-sm flex items-start gap-2">
+                          <FiAward size={16} className="flex-shrink-0 mt-0.5" />
+                          <span>
+                            Practice interview sessions are designed to help Year 4 students prepare for job interviews. 
+                            Your advisor will conduct a mock interview and provide feedback.
+                          </span>
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                )}
+
                 <div>
                   <label className="flex items-center gap-2 text-sm font-medium text-gray-300 mb-2">
                     <FiCalendar className="text-cyan-400" />
@@ -497,30 +555,43 @@ const StudentAppointmentBooking = () => {
 
                 <div>
                   <label className="block text-sm font-medium text-gray-300 mb-2">
-                    Appointment Details (Optional)
+                    {appointmentType === 'practice_interview' ? 'Interview Focus Areas (Optional)' : 'Appointment Details (Optional)'}
                   </label>
                   <textarea
                     value={notes}
                     onChange={(e) => setNotes(e.target.value)}
                     rows={3}
-                    placeholder="Add any specific topics or questions you'd like to discuss..."
+                    placeholder={
+                      appointmentType === 'practice_interview'
+                        ? 'Describe the type of role you\'re preparing for and any specific areas you\'d like to focus on...'
+                        : 'Add any specific topics or questions you\'d like to discuss...'
+                    }
                     className="w-full p-3 bg-gray-800 border border-gray-700 rounded-xl text-white placeholder-gray-500 focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20 transition-all"
                     disabled={!!existingAppointmentOnDate}
                   />
                 </div>
 
                 <button
-                  type="submit"
+                  type="button"
+                  onClick={handleBookAppointment}
                   disabled={!selectedDate || !selectedTime || loading || !!existingAppointmentOnDate}
                   className={`w-full py-4 rounded-xl font-semibold text-white transition-all shadow-lg ${
                     !selectedDate || !selectedTime || loading || !!existingAppointmentOnDate
                       ? 'bg-gray-700 cursor-not-allowed'
+                      : appointmentType === 'practice_interview'
+                      ? 'bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 shadow-purple-500/30'
                       : 'bg-gradient-to-r from-teal-500 to-cyan-500 hover:from-teal-600 hover:to-cyan-600 shadow-cyan-500/30'
                   }`}
                 >
-                  {loading ? 'Booking...' : existingAppointmentOnDate ? 'Cancel Existing Appointment First' : 'Book Appointment'}
+                  {loading 
+                    ? 'Booking...' 
+                    : existingAppointmentOnDate 
+                    ? 'Cancel Existing Appointment First' 
+                    : appointmentType === 'practice_interview'
+                    ? 'Book Practice Interview'
+                    : 'Book Appointment'}
                 </button>
-              </form>
+              </div>
             </div>
           </div>
         </div>

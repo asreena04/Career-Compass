@@ -19,6 +19,7 @@ const CompetitionPostForm = ({ onPostSuccess }) => {
   const [competitionImage, setCompetitionImage] = useState(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState(null);
+  const today = new Date().toISOString().split("T")[0];
 
   // Function for user to change input field content, event object, e was created when change occur.
   const handleChange = (e) => {
@@ -69,6 +70,12 @@ const CompetitionPostForm = ({ onPostSuccess }) => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError(null);
+    if (competitionData.startTime && competitionData.endTime) {
+      if (competitionData.endTime <= competitionData.startTime) {
+        setError("End Time must be later than Start Time.");
+        return;
+      }
+    }
     setIsSubmitting(true); // Start submit form.
     const { publicUrl, uploadError } = await uploadImage();
     if (uploadError) { // Error occur. Cannot submit form.
@@ -145,6 +152,7 @@ const CompetitionPostForm = ({ onPostSuccess }) => {
                 name="dateCompetition"
                 value={competitionData.dateCompetition}
                 onChange={handleChange}
+                min={today}
                 required
                 className="w-full p-3 border border-gray-600 bg-gray-800 text-white rounded-lg focus:ring-yellow-500 focus:border-yellow-500 transition duration-150"
               />

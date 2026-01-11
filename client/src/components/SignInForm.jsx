@@ -355,9 +355,12 @@ const SignInForm = () => {
                 case 'Company':
                     navigate('/home');
                     break;
+                case 'Admin':
+                    navigate('/admin/users')
+                    break;
                 default:
                     setError("Sign in successful, but role is unrecognized.");
-                    navigate('/default-dashboard');
+                    navigate('/home');
             }
         } catch (err) {
             console.error(err);

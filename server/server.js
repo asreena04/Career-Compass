@@ -1222,15 +1222,29 @@ app.get("/advisor/student/:studentId/completed-skills", async (req, res) => {
   }
 });
 
-// ==================== Admin ================================
-// -------- View all user from profiles table (profile + role profile)
+// ==================== ADMIN USER MANAGEMENT ====================
+
+// 1. GET /admin/users - List all users (MOST SPECIFIC STATIC ROUTE FIRST)
+app.get("/admin/users", async (req, res) => {
+  const { user, error } = await requireAdmin(req);
+  if (!user) return res.status(401).json({ error });
+
+  const { data, error: qErr } = await admin
+    .from("profiles")
+    .select("id, email, role, username, avatar_url")
+    .order("email", { ascending: true });
+
+  if (qErr) return res.status(400).json({ error: qErr.message });
+  return res.json(data || []);
+});
+
+// 2. GET /admin/users/:id/details - SPECIFIC PARAM ROUTE BEFORE GENERIC
 app.get("/admin/users/:id/details", async (req, res) => {
   const { user, error } = await requireAdmin(req);
   if (!user) return res.status(401).json({ error });
 
   const targetId = req.params.id;
 
-  // 1) Base profile
   const { data: profile, error: pErr } = await admin
     .from("profiles")
     .select("id, email, role, username, avatar_url")
@@ -1239,7 +1253,6 @@ app.get("/admin/users/:id/details", async (req, res) => {
 
   if (pErr) return res.status(400).json({ error: pErr.message });
 
-  // 2) Role-specific
   let roleProfile = null;
 
   if (profile.role === "Student") {
@@ -1278,14 +1291,36 @@ app.get("/admin/users/:id/details", async (req, res) => {
   return res.json({ profile, roleProfile });
 });
 
-// ------------ update student profile ---------------
+// 3. PATCH /admin/users/:id - Update base profile (AFTER SPECIFIC ROUTES)
+app.patch("/admin/users/:id", async (req, res) => {
+  const { user, error } = await requireAdmin(req);
+  if (!user) return res.status(401).json({ error });
+
+  const id = req.params.id;
+  const { username, avatar_url } = req.body;
+
+  const payload = {};
+  if (username !== undefined) payload.username = username;
+  if (avatar_url !== undefined) payload.avatar_url = avatar_url;
+
+  const { data, error: updErr } = await admin
+    .from("profiles")
+    .update(payload)
+    .eq("id", id)
+    .select("id, email, role, username, avatar_url")
+    .single();
+
+  if (updErr) return res.status(400).json({ error: updErr.message });
+  return res.json({ ok: true, profile: data });
+});
+
+// 4. PATCH /admin/students/:id
 app.patch("/admin/students/:id", async (req, res) => {
   const { user, error } = await requireAdmin(req);
   if (!user) return res.status(401).json({ error });
 
   const id = req.params.id;
 
-  // Ensure target is a Student
   const { data: p, error: pErr } = await admin
     .from("profiles")
     .select("id, role")
@@ -1301,7 +1336,6 @@ app.patch("/admin/students/:id", async (req, res) => {
     if (req.body[k] !== undefined) payload[k] = req.body[k];
   }
 
-  // Optional: normalize numeric year
   if (payload.year_of_study !== undefined && payload.year_of_study !== null) {
     payload.year_of_study = Number(payload.year_of_study);
     if (Number.isNaN(payload.year_of_study)) {
@@ -1320,15 +1354,13 @@ app.patch("/admin/students/:id", async (req, res) => {
   return res.json({ ok: true, student_profile: data });
 });
 
-// ----------admin: update advisor profile---------------
-
+// 5. PATCH /admin/advisors/:id
 app.patch("/admin/advisors/:id", async (req, res) => {
   const { user, error } = await requireAdmin(req);
   if (!user) return res.status(401).json({ error });
 
   const id = req.params.id;
 
-  // Ensure target is an Academic Advisor
   const { data: p, error: pErr } = await admin
     .from("profiles")
     .select("id, role")
@@ -1357,15 +1389,13 @@ app.patch("/admin/advisors/:id", async (req, res) => {
   return res.json({ ok: true, advisor_profile: data });
 });
 
-// ---------------admin: update company profile-------------
-
+// 6. PATCH /admin/companies/:id
 app.patch("/admin/companies/:id", async (req, res) => {
   const { user, error } = await requireAdmin(req);
   if (!user) return res.status(401).json({ error });
 
   const id = req.params.id;
 
-  // Ensure target is a Company
   const { data: p, error: pErr } = await admin
     .from("profiles")
     .select("id, role")
@@ -1392,8 +1422,21 @@ app.patch("/admin/companies/:id", async (req, res) => {
   return res.json({ ok: true, company_profile: data });
 });
 
+// ==================== ADMIN COMPETITION MANAGEMENT ====================
 
-// --- Add New Competition (in competition_posts table in supabase)
+app.get("/admin/competitions", async (req, res) => {
+  const { user, error } = await requireAdmin(req);
+  if (!user) return res.status(401).json({ error });
+
+  const { data, error: qErr } = await admin
+    .from("competition_posts")
+    .select("*")
+    .order("created_at", { ascending: false });
+
+  if (qErr) return res.status(400).json({ error: qErr.message });
+  res.json(data);
+});
+
 app.post("/admin/competitions", async (req, res) => {
   const { user, error } = await requireAdmin(req);
   if (!user) return res.status(401).json({ error });
@@ -1417,7 +1460,7 @@ app.post("/admin/competitions", async (req, res) => {
   const { data, error: insErr } = await admin
     .from("competition_posts")
     .insert([{
-      user_id: user.id, // admin who created it
+      user_id: user.id,
       competition_title,
       description,
       venue: venue ?? null,
@@ -1435,21 +1478,6 @@ app.post("/admin/competitions", async (req, res) => {
   res.json({ ok: true, competition: data });
 });
 
-// ----- admin view: competition list
-app.get("/admin/competitions", async (req, res) => {
-  const { user, error } = await requireAdmin(req);
-  if (!user) return res.status(401).json({ error });
-
-  const { data, error: qErr } = await admin
-    .from("competition_posts")
-    .select("*")
-    .order("created_at", { ascending: false });
-
-  if (qErr) return res.status(400).json({ error: qErr.message });
-  res.json(data);
-});
-
-// ---- admin: update competition
 app.patch("/admin/competitions/:id", async (req, res) => {
   const { user, error } = await requireAdmin(req);
   if (!user) return res.status(401).json({ error });
@@ -1482,7 +1510,6 @@ app.patch("/admin/competitions/:id", async (req, res) => {
   res.json({ ok: true, competition: data });
 });
 
-// ---- admin: delete competition
 app.delete("/admin/competitions/:id", async (req, res) => {
   const { user, error } = await requireAdmin(req);
   if (!user) return res.status(401).json({ error });
@@ -1495,7 +1522,6 @@ app.delete("/admin/competitions/:id", async (req, res) => {
   if (delErr) return res.status(400).json({ error: delErr.message });
   res.json({ ok: true });
 });
-
 
 
 // ==================== CV GENERATOR =========================

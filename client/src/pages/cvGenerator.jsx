@@ -161,7 +161,7 @@ export default function CV() {
 
       // Use environment variable for backend URL
       const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
-      
+
       console.log("Sending request to:", `${API_URL}/api/generate-cv`);
 
       const response = await fetch(`${API_URL}/api/generate-cv`, {
@@ -187,14 +187,14 @@ export default function CV() {
 
       // Check if response is JSON or PDF
       const contentType = response.headers.get('content-type');
-      
+
       if (contentType && contentType.includes('application/json')) {
         // Old endpoint - returns JSON with URL
         const data = await response.json();
         console.log("Response data:", data);
-        
+
         setResponseMsg(`✅ Success! CV generated successfully!`);
-        
+
         if (data.url) {
           window.open(data.url, '_blank');
         }
@@ -202,14 +202,14 @@ export default function CV() {
         // New endpoint - streams PDF directly
         const blob = await response.blob();
         const url = window.URL.createObjectURL(blob);
-        
+
         setResponseMsg(`✅ Success! CV generated successfully!`);
         window.open(url, '_blank');
       }
 
     } catch (error) {
       console.error("CV generation error:", error);
-      
+
       // Better error messages
       if (error.message === 'Failed to fetch') {
         setResponseMsg(`❌ Error: Cannot connect to server. Make sure the backend is running.`);

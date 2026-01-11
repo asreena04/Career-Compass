@@ -1148,28 +1148,24 @@ app.get('/advisor/student/:studentId/completed-skills', async (req, res) => {
 });
 
 // Add this endpoint anywhere in your server.js
-app.post("/api/generate-cv", async (req, res) => {
+// Replace your existing /api/generate-cv endpoint with this:
 
+app.post("/api/generate-cv", async (req, res) => {
   const cvData = req.body;
 
   try {
-    // Validate required fields
     if (!cvData.name) {
       return res.status(400).json({ error: "Name is required" });
     }
 
-    // Create a new PDF document
     const doc = new PDFDocument({ margin: 50 });
-
-    // Create unique filename
-    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-    const safeName = cvData.name.replace(/[^a-zA-Z0-9]/g, '_');
-    const filename = `CV_${safeName}_${timestamp}.pdf`;
-    const storagePath = `generated/${filename}`;
-
-    // Generate PDF content
-    const chunks = [];
-    doc.on('data', chunk => chunks.push(chunk));
+    const filename = `CV_${cvData.name.replace(/[^a-zA-Z0-9]/g, '_')}.pdf`;
+    
+    // Stream directly to response (FAST - no Supabase upload)
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `inline; filename="${filename}"`);
+    
+    doc.pipe(res);
 
     // Header - Name
     doc.fontSize(24).font('Helvetica-Bold').text(cvData.name.toUpperCase(), { align: 'center' });
@@ -1247,49 +1243,14 @@ app.post("/api/generate-cv", async (req, res) => {
       doc.text(`Email: ${cvData.referenceEmail || ''} | Phone: ${cvData.referencePhoneNumber || ''}`);
     }
 
-    // Finalize PDF
     doc.end();
-
-    // Wait for PDF generation to complete
-    await new Promise((resolve, reject) => {
-      doc.on('end', resolve);
-      doc.on('error', reject);
-    });
-
-    const pdfBuffer = Buffer.concat(chunks);
-
-    // Upload to Supabase Storage
-    const { data: uploadData, error: uploadError } = await admin.storage
-      .from('cvs')
-      .upload(storagePath, pdfBuffer, {
-        contentType: 'application/pdf',
-        upsert: false
-      });
-
-    if (uploadError) throw uploadError;
-
-    // Get public URL
-    const { data: { publicUrl } } = admin.storage
-      .from('cvs')
-      .getPublicUrl(storagePath);
-
-    return res.json({
-      status: "success",
-      message: "CV generated successfully",
-      filename,
-      url: publicUrl,
-      download_url: publicUrl
-    });
 
   } catch (err) {
     console.error("❌ CV Generation Error:", err);
-    return res.status(500).json({
-      status: "error",
-      message: err.message,
-      details: "Check server logs for more information"
-    });
+    return res.status(500).json({ error: err.message });
   }
 });
+    
 
 const port = process.env.PORT || 3001;
 app.listen(port, () => console.log(`API running on http://localhost:${port}`));

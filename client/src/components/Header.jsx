@@ -4,6 +4,7 @@ import { supabase } from "../supabaseClient";
 import { useRole } from "../hooks/useRole";
 import 'boxicons/css/boxicons.min.css';
 import StudentNotification from "./StudentNotification";
+import AdvisorNotification from "./AdvisorNotification";
 
 const DEFAULT_AVATAR = 'https://i.ibb.co/L89B6Pz/default-avatar.png';
 
@@ -153,6 +154,7 @@ const Header = () => {
         ))}
 
         {role === "Student" && <StudentNotification />}
+        {role === "Academic Advisor" && <AdvisorNotification />}
 
         <div className="relative" ref={profileRef}>
           {isLoggedIn ? (

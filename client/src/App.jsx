@@ -24,6 +24,8 @@ import StudentViewJobPage from "./pages/StudentViewJobPage.jsx";
 import CV from "./pages/cvGenerator.jsx";
 import ProofManagement from "./components/ProofManagement.jsx";
 import AdvisorSkillsTracker from "./components/AdvisorSkillTracker.jsx";
+import AdminUsersPage from "./pages/AdminUsersPage.jsx";
+import AdminCompetitionsPage from "./pages/AdminCompetitionsPage.jsx";
 
 
 
@@ -137,7 +139,16 @@ export default function App() {
           path="/edit-delete-job" 
           element={<ProtectedRoute allow={["Company"]}><EditDeleteJobPage /></ProtectedRoute>}
         />
-
+        {/* ================= ADMIN ================= */}
+        <Route
+          path="/admin/users"
+          element={
+            <ProtectedRoute allow={["Admin"]}><AdminUsersPage /></ProtectedRoute>}
+        />
+        <Route
+          path="/admin/competitions"
+          element={<ProtectedRoute allow={["Admin"]}><AdminCompetitionsPage /></ProtectedRoute>}
+        />
       </Route>
     </Routes>
   );

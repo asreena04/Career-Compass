@@ -40,6 +40,10 @@ const Header = () => {
       { to: "/advisor/appointments", label: "Appointment\nManagement" },
       { to: "/proof-verification", label: "Proof\nVerification" },
     ],
+    "Admin": [
+      { to: "/admin/users", label: "User\nManagement" },
+      { to: "/admin/competitions", label: "Competition\nManagement" },
+    ],
   };
 
   // Logic to filter links based on role and student year

@@ -174,7 +174,7 @@ const JobPostForm = ({ onPostSuccess, initialData = null, isEditing = false }) =
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to post job");
 
-      alert(isEditing ? "✅ Job updated successfully!" : "✅ Job posted successfully!");
+      alert(isEditing ? "Job updated successfully!" : "Job posted successfully!");
 
       // reset form
       setJobData({
@@ -195,7 +195,7 @@ const JobPostForm = ({ onPostSuccess, initialData = null, isEditing = false }) =
       if (onPostSuccess) onPostSuccess();
     } catch (err) {
       console.error(err);
-      alert(`❌ ${err.message}`);
+      alert(`${err.message}`);
     } finally {
       setIsSubmitting(false);
     }

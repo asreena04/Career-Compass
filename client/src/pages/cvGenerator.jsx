@@ -153,7 +153,18 @@ export default function CV() {
     setResponseMsg("⏳ Processing... Please wait.");
 
     try {
-      const response = await fetch('http://localhost:3001/api/generate-cv', {
+      // Validate required fields before sending
+      if (!formData.name.trim()) {
+        setResponseMsg("❌ Error: Name is required");
+        return;
+      }
+
+      // Use environment variable for backend URL
+      const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+
+      console.log("Sending request to:", `${API_URL}/api/generate-cv`);
+
+      const response = await fetch(`${API_URL}/api/generate-cv`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
@@ -161,24 +172,50 @@ export default function CV() {
         body: JSON.stringify(formData)
       });
 
+      console.log("Response status:", response.status);
+      console.log("Content-Type:", response.headers.get('content-type'));
+
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.error || `Server error: ${response.status}`);
+        const contentType = response.headers.get('content-type');
+        if (contentType && contentType.includes('application/json')) {
+          const errorData = await response.json();
+          throw new Error(errorData.error || `Server error: ${response.status}`);
+        } else {
+          throw new Error(`Server error: ${response.status}`);
+        }
       }
 
-      const data = await response.json();
+      // Check if response is JSON or PDF
+      const contentType = response.headers.get('content-type');
 
-      setResponseMsg(`✅ Success! CV generated successfully!`);
+      if (contentType && contentType.includes('application/json')) {
+        // Old endpoint - returns JSON with URL
+        const data = await response.json();
+        console.log("Response data:", data);
 
-      if (data.url) {
-        window.open(data.url, '_blank');
+        setResponseMsg(`✅ Success! CV generated successfully!`);
+
+        if (data.url) {
+          window.open(data.url, '_blank');
+        }
+      } else {
+        // New endpoint - streams PDF directly
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+
+        setResponseMsg(`✅ Success! CV generated successfully!`);
+        window.open(url, '_blank');
       }
-
-      console.log("PDF URL:", data.url);
 
     } catch (error) {
       console.error("CV generation error:", error);
-      setResponseMsg(`❌ Error: ${error.message}`);
+
+      // Better error messages
+      if (error.message === 'Failed to fetch') {
+        setResponseMsg(`❌ Error: Cannot connect to server. Make sure the backend is running.`);
+      } else {
+        setResponseMsg(`❌ Error: ${error.message}`);
+      }
     }
   };
 

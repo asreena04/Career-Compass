@@ -7,16 +7,24 @@ import PDFDocument from 'pdfkit';
 dotenv.config();
 
 const app = express();
+app.use(express.json({ limit: "10mb" }));
 // -- Deployment
-app.use(cors({ 
-  origin: [
-    'http://localhost:5173',  // local dev
-    'https://career-compass-client.vercel.app/', // vercel domain
-    /\.vercel\.app$/  // all vercel preview deployments
-  ],
-  credentials: true 
+const allowedOrigins = new Set([
+  "http://localhost:5173",
+  process.env.FRONTEND_URL,
+]);
+
+app.use(cors({
+  origin: (origin, cb) => {
+    if (!origin) return cb(null, true);
+    if (allowedOrigins.has(origin)) return cb(null, true);
+    if (process.env.NODE_ENV !== "production" && origin.endsWith(".vercel.app")) {
+      return cb(null, true);
+    }
+    return cb(new Error("Not allowed by CORS"));
+  },
+  credentials: true,
 }));
-app.use(express.json());
 
 const admin = createClient(
   process.env.SUPABASE_URL,
@@ -80,6 +88,22 @@ async function requireAdvisor(req) {
   if (profErr) return { user: null, error: profErr.message };
   if (profile?.role !== "Academic Advisor")
     return { user: null, error: "Academic Advisor only" };
+
+  return { user, error: null };
+}
+
+async function requireAdmin(req) {
+  const { user, error } = await requireAuth(req);
+  if (!user) return { user: null, error };
+
+  const { data: profile, error: profErr } = await admin
+    .from("profiles")
+    .select("role")
+    .eq("id", user.id)
+    .single();
+
+  if (profErr) return { user: null, error: profErr.message };
+  if (profile?.role !== "Admin") return { user: null, error: "Admin only" };
 
   return { user, error: null };
 }
@@ -1075,79 +1099,261 @@ app.patch("/advisor/proofs/:proofId", async (req, res) => {
 });
 
 // Get completed skills for a student
-app.get('/advisor/student/:studentId/completed-skills', async (req, res) => {
+app.get("/advisor/student/:studentId/completed-skills", async (req, res) => {
   const { user, error } = await requireAdvisor(req);
   if (!user) return res.status(401).json({ error });
 
   const studentId = req.params.studentId;
-  try {
-    const { studentId } = req.params;
 
-    // Verify the advisor has access to this student
-    const { data: studentProfile, error: studentError } = await supabase
-      .from('student_profiles')
-      .select('advisor_id')
-      .eq('id', studentId)
+  try {
+    // 1) Verify the advisor has access to this student
+    const { data: studentProfile, error: studentError } = await admin
+      .from("student_profiles")
+      .select("advisor_id")
+      .eq("id", studentId)
       .single();
 
-    if (studentError || studentProfile.advisor_id !== req.user.id) {
-      return res.status(403).json({ error: 'Unauthorized access to student data' });
+    if (studentError) {
+      return res.status(400).json({ error: studentError.message });
     }
 
-    // Fetch completed skills with progress status 'completed'
-    const { data: completedSkills, error } = await supabase
-      .from('roadmap_progress')
+    if (studentProfile.advisor_id !== user.id) {
+      return res.status(403).json({ error: "Unauthorized access to student data" });
+    }
+
+    // 2) Get student's active target (optional but usually useful for job role name)
+    const { data: target, error: targetErr } = await admin
+      .from("student_job_target")
+      .select("job_role_id, job_role:job_role_id(job_role_name)")
+      .eq("student_id", studentId)
+      .eq("is_active", true)
+      .maybeSingle();
+
+    if (targetErr) return res.status(400).json({ error: targetErr.message });
+
+    // 3) Fetch completed progress rows (+ skill name)
+    // If you want to restrict to active target only, add .eq("job_role_id", target.job_role_id)
+    let progressQuery = admin
+      .from("student_skill_progress")
       .select(`
         progress_id,
-        skill_id,
+        student_id,
+        job_role_id,
         planned_year,
-        completion_date,
-        skills:skill_id (
-          skill_name,
-          skill_category
-        ),
-        career_target:target_id (
-          job_role:job_role_id (
-            job_role_name
-          )
-        ),
-        skill_proofs!inner (
-          proof_id,
-          proof_url,
-          proof_file_path,
-          description,
-          status
-        )
+        progress_status,
+        skill_id,
+        skill:skill_id(skill_id, skill_name)
       `)
-      .eq('student_id', studentId)
-      .eq('progress_status', 'completed')
-      .eq('skill_proofs.status', 'approved')
-      .order('completion_date', { ascending: false });
+      .eq("student_id", studentId)
+      .eq("progress_status", "Completed")
+      .order("planned_year", { ascending: true });
 
-    if (error) throw error;
+    // restrict to active target if exists
+    if (target?.job_role_id) {
+      progressQuery = progressQuery.eq("job_role_id", target.job_role_id);
+    }
 
-    // Format the data
-    const formattedSkills = completedSkills.map(item => ({
-      progress_id: item.progress_id,
-      skill_id: item.skill_id,
-      skill_name: item.skills?.skill_name,
-      skill_category: item.skills?.skill_category,
-      planned_year: item.planned_year,
-      completion_date: item.completion_date,
-      job_role_name: item.career_target?.job_role?.job_role_name,
-      proof_url: item.skill_proofs?.[0]?.proof_url,
-      proof_file_path: item.skill_proofs?.[0]?.proof_file_path,
-      proof_description: item.skill_proofs?.[0]?.description
-    }));
+    const { data: progressRows, error: progErr } = await progressQuery;
+    if (progErr) return res.status(400).json({ error: progErr.message });
 
-    res.json(formattedSkills);
+    if (!progressRows || progressRows.length === 0) {
+      return res.json({
+        student_id: studentId,
+        target: target || null,
+        completed: [],
+      });
+    }
+
+    // 4) (Optional) Attach proof info if exists (approved/pending/rejected)
+    // We'll fetch proofs for those completed skill_ids
+    const skillIds = progressRows.map(r => r.skill_id);
+
+    const { data: proofs, error: proofErr } = await admin
+      .from("skill_proof")
+      .select(`
+        proof_id,
+        skill_id,
+        status,
+        file_url,
+        description,
+        submitted_at,
+        reviewed_at,
+        review_note
+      `)
+      .eq("student_id", studentId)
+      .in("skill_id", skillIds);
+
+    if (proofErr) return res.status(400).json({ error: proofErr.message });
+
+    const proofMap = new Map((proofs || []).map(p => [p.skill_id, p]));
+
+    // 5) Format response
+    const completed = progressRows.map(r => {
+      const proof = proofMap.get(r.skill_id) || null;
+      return {
+        progress_id: r.progress_id,
+        skill_id: r.skill?.skill_id ?? r.skill_id,
+        skill_name: r.skill?.skill_name ?? null,
+        planned_year: r.planned_year,
+        job_role_id: r.job_role_id,
+        progress_status: r.progress_status, // "Completed"
+        proof: proof
+          ? {
+              proof_id: proof.proof_id,
+              status: proof.status,
+              file_url: proof.file_url,
+              description: proof.description,
+              submitted_at: proof.submitted_at,
+              reviewed_at: proof.reviewed_at,
+              review_note: proof.review_note,
+            }
+          : null,
+      };
+    });
+
+    return res.json({
+      student_id: studentId,
+      target: target || null,
+      completed,
+    });
   } catch (err) {
-    console.error('Error fetching completed skills:', err);
-    res.status(500).json({ error: 'Failed to fetch completed skills' });
+    console.error("Error fetching completed skills:", err);
+    return res.status(500).json({ error: "Failed to fetch completed skills" });
   }
 });
 
-// Add this endpoint anywhere in your server.js
+// ==================== Admin ================================
+// -------- View all user from profiles table
+app.get("/admin/users", async (req, res) => {
+  const { user, error } = await requireAdmin(req);
+  if (!user) return res.status(401).json({ error });
+
+  const { data, error: qErr } = await admin
+    .from("profiles")
+    .select("id, email, role, username, avatar_url")
+    .order("email", { ascending: true });
+
+  if (qErr) return res.status(400).json({ error: qErr.message });
+  res.json(data);
+});
+
+// ------------- modify user (role, username, avatar_url)
+app.patch("/admin/users/:id", async (req, res) => {
+  const { user, error } = await requireAdmin(req);
+  if (!user) return res.status(401).json({ error });
+
+  const targetId = req.params.id;
+  const { role, username, avatar_url } = req.body;
+
+  // prevent changing yourself out of admin by accident (optional)
+  if (targetId === user.id && role && role !== "Admin") {
+    return res.status(400).json({ error: "You cannot remove your own Admin role." });
+  }
+
+  const payload = {};
+  if (role) payload.role = role; // must be one of the enum values
+  if (username !== undefined) payload.username = username;
+  if (avatar_url !== undefined) payload.avatar_url = avatar_url;
+
+  const { data, error: updErr } = await admin
+    .from("profiles")
+    .update(payload)
+    .eq("id", targetId)
+    .select("id, email, role, username, avatar_url")
+    .single();
+
+  if (updErr) return res.status(400).json({ error: updErr.message });
+  res.json({ ok: true, user: data });
+});
+
+// --- Add New Competition (in competition_posts table in supabase)
+app.post("/admin/competitions", async (req, res) => {
+  const { user, error } = await requireAdmin(req);
+  if (!user) return res.status(401).json({ error });
+
+  const {
+    competition_title,
+    description,
+    venue,
+    price_participate,
+    registration_link,
+    image_url,
+    competition_date,
+    start_time,
+    end_time,
+  } = req.body;
+
+  if (!competition_title || !description || !competition_date) {
+    return res.status(400).json({ error: "Missing required fields." });
+  }
+
+  const { data, error: insErr } = await admin
+    .from("competition_posts")
+    .insert([{
+      user_id: user.id, // admin who created it
+      competition_title,
+      description,
+      venue: venue ?? null,
+      price_participate: price_participate ?? null,
+      registration_link: registration_link ?? null,
+      image_url: image_url ?? null,
+      competition_date,
+      start_time: start_time ?? null,
+      end_time: end_time ?? null,
+    }])
+    .select()
+    .single();
+
+  if (insErr) return res.status(400).json({ error: insErr.message });
+  res.json({ ok: true, competition: data });
+});
+
+// ----- admin view: competition list
+app.get("/admin/competitions", async (req, res) => {
+  const { user, error } = await requireAdmin(req);
+  if (!user) return res.status(401).json({ error });
+
+  const { data, error: qErr } = await admin
+    .from("competition_posts")
+    .select("*")
+    .order("created_at", { ascending: false });
+
+  if (qErr) return res.status(400).json({ error: qErr.message });
+  res.json(data);
+});
+
+// ---- admin: delete/update competition
+app.patch("/admin/competitions/:id", async (req, res) => {
+  const { user, error } = await requireAdmin(req);
+  if (!user) return res.status(401).json({ error });
+
+  const { data, error: updErr } = await admin
+    .from("competition_posts")
+    .update(req.body)
+    .eq("id", req.params.id)
+    .select()
+    .single();
+
+  if (updErr) return res.status(400).json({ error: updErr.message });
+  res.json({ ok: true, competition: data });
+});
+
+app.delete("/admin/competitions/:id", async (req, res) => {
+  const { user, error } = await requireAdmin(req);
+  if (!user) return res.status(401).json({ error });
+
+  const { error: delErr } = await admin
+    .from("competition_posts")
+    .delete()
+    .eq("id", req.params.id);
+
+  if (delErr) return res.status(400).json({ error: delErr.message });
+  res.json({ ok: true });
+});
+
+
+
+// ==================== CV GENERATOR =========================
 app.post("/api/generate-cv", async (req, res) => {
 
   const cvData = req.body;
@@ -1282,7 +1488,7 @@ app.post("/api/generate-cv", async (req, res) => {
     });
 
   } catch (err) {
-    console.error("❌ CV Generation Error:", err);
+    console.error("CV Generation Error:", err);
     return res.status(500).json({
       status: "error",
       message: err.message,
@@ -1291,7 +1497,10 @@ app.post("/api/generate-cv", async (req, res) => {
   }
 });
 
-const port = process.env.PORT || 3001;
-app.listen(port, () => console.log(`API running on http://localhost:${port}`));
-
 export default app;
+
+// Only run locally
+if (process.env.NODE_ENV !== "production") {
+  const port = process.env.PORT || 3001;
+  app.listen(port, () => console.log(`API running on http://localhost:${port}`));
+}

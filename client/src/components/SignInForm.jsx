@@ -384,7 +384,7 @@ const SignInForm = () => {
                     navigate('/home');
                     break;
                 case 'Admin':
-                    navigate('/admin');
+                    navigate('/admin/users');
                     break;
                 default:
                     setError("Sign in successful, but role is unrecognized.");

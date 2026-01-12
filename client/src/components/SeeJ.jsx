@@ -1,4 +1,3 @@
-// SeeJ.jsx
 import React, { useState, useEffect, useCallback } from "react";
 import { supabase } from "../supabaseClient";
 
